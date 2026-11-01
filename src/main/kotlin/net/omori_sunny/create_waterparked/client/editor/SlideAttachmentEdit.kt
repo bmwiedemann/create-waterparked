@@ -52,7 +52,14 @@ object SlideAttachmentEdit {
         val eye = player.eyePosition
         val rayEnd = eye.add(player.getViewVector(1f).scale(6.0))
         var best: SlideAttachmentBlockEntity? = null
-        var bestD = Double.MAX_VALUE
+        // a real block in front of the attachment keeps the vanilla target
+        // (the attachment's own host block never occludes it)
+        val vanilla = mc.hitResult as? net.minecraft.world.phys.BlockHitResult
+        val onAttachment = vanilla != null && vanilla.type == net.minecraft.world.phys.HitResult.Type.BLOCK &&
+            level.getBlockState(vanilla.blockPos).block is
+                net.omori_sunny.create_waterparked.content.attachment.SlideAttachmentBlock
+        val real = if (onAttachment) Double.POSITIVE_INFINITY else ClickOcclusion.realHitDistance(mc)
+        var bestD = if (real.isInfinite()) Double.MAX_VALUE else real * real + 1.0e-3
         for (be in SlideAttachmentClientIndex.all()) {
             if (be.isRemoved) continue
             val entry = be.entry ?: continue
@@ -120,6 +127,9 @@ object SlideAttachmentEdit {
         net.omori_sunny.create_waterparked.client.editor.WaterslideEditSounds.playCommitSuccess()
     }
 
+    private fun editClaimsClick(mc: Minecraft): Boolean =
+        SlideControlPointEditor.anyHoveringOrDragging(mc) || pickAttachment(mc) != null
+
     // enter only, sneak-right-click exits
     fun toggle(mc: Minecraft) {
         if (editingBePos == null) tryEnter(mc)
@@ -168,6 +178,9 @@ object SlideAttachmentEdit {
                 exit()
                 return
             }
+            // only clicks aimed at the edited attachment or its control
+            // points belong to edit mode; the wrench works normally elsewhere
+            if (!editClaimsClick(mc)) return
             event.setCanceled(true)
             event.setSwingHand(false)
             return
@@ -188,6 +201,7 @@ object SlideAttachmentEdit {
             return
         }
         if (editingBePos != null) {
+            if (!editClaimsClick(mc)) return
             event.isCanceled = true
             return
         }
