@@ -250,9 +250,10 @@ object WaterslideSectorEdit {
         }
         val hit = resolveWallHit(level, hitVec, requireAnchor = pending)
         if (hit == null) {
+            // not a wall of the pending slide: drop the selection but let the
+            // click act normally (place the block, use the axe) instead of
+            // silently eating it
             clearPending(level)
-            event.isCanceled = true
-            event.cancellationResult = InteractionResult.SUCCESS
             return
         }
         optimisticAdd(level, hit.curve, action, hit.angle, blockId)
