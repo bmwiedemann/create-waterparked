@@ -51,7 +51,9 @@ object WaterslideSupportEdit {
     fun onClientTick() {
         val mc = Minecraft.getInstance() ?: return
         if (mc.player == null) return
-        val pick = freshPick()
+        // occluded supports neither highlight nor report a hover: the server
+        // swallows tool clicks while a hover is fresh
+        val pick = freshPick()?.takeUnless { occludedByRealBlock(mc, it) }
         hovered = pick
 
         // the outline itself is drawn at the render stage by
@@ -106,9 +108,13 @@ object WaterslideSupportEdit {
         if (!event.isUseItem) return
         val mc = Minecraft.getInstance()
         val player = mc.player ?: return
+        // only support tools may own the click: an empty hand or any other item
+        // (slide track, levers, doors, ...) must reach the block it aims at
+        if (!canInteract(player.mainHandItem) && !canInteract(player.offhandItem)) return
         // slide-native pick first; fall back to a fresh ray march at click time
         // (the hover cache lags one tick behind handleKeybinds)
         val pick = hovered ?: freshPick() ?: return
+        if (occludedByRealBlock(mc, pick)) return
         val mainOk = outlineShownFor(pick, mc, player.mainHandItem)
         val offOk = outlineShownFor(pick, mc, player.offhandItem)
         if (!mainOk && !offOk) {
@@ -141,8 +147,9 @@ object WaterslideSupportEdit {
         val heldItem = player.getItemInHand(usedHand)
         if (!canInteract(heldItem)) return
         val mc = Minecraft.getInstance()
-        val pick = hovered ?: freshPick()
-        if (!outlineShownFor(pick ?: return, mc, heldItem)) {
+        val pick = hovered ?: freshPick() ?: return
+        if (occludedByRealBlock(mc, pick)) return
+        if (!outlineShownFor(pick, mc, heldItem)) {
             // hovered a support part but this hand combo is rejected (e.g.
             // wrench on an empty part): swallow the click so the slide editor
             // does not pick it up - the support interaction owns any click
@@ -167,9 +174,10 @@ object WaterslideSupportEdit {
         val heldItem = player.getItemInHand(usedHand)
         if (!canInteract(heldItem)) return
         val mc = Minecraft.getInstance()
-        val pick = hovered ?: freshPick()
+        val pick = hovered ?: freshPick() ?: return
+        if (occludedByRealBlock(mc, pick)) return
         // the same hand logic as the outline, no hand mismatch
-        if (!outlineShownFor(pick ?: return, mc, heldItem)) {
+        if (!outlineShownFor(pick, mc, heldItem)) {
             // swallowed: any click on support geometry belongs to the support
             // interaction, even when the held combo is rejected (wrench on an
             // empty part must not fall through to the slide sector editor)
@@ -242,6 +250,21 @@ object WaterslideSupportEdit {
         val other = if (eventHand == InteractionHand.MAIN_HAND) InteractionHand.OFF_HAND else InteractionHand.MAIN_HAND
         return if (canInteract(player.getItemInHand(other))) other else eventHand
     }
+
+    // a real block in front of the support keeps the click (vanilla target wins)
+    private fun occludedByRealBlock(mc: Minecraft, pick: WaterslideTubeVisual.SupportPick): Boolean {
+        val player = mc.player ?: return false
+        // arcDistance: along-ray closest approach (flywheel picks); the
+        // renderer fallback leaves it 0, so use its outline box entry there
+        val d = if (pick.arcDistance > 0.0) pick.arcDistance - SUPPORT_OCCLUSION_SLACK
+            else ClickOcclusion.rayDistanceTo(
+                pick.outlineBox, player.eyePosition, player.getViewVector(1f), SUPPORT_OCCLUSION_RANGE
+            ) ?: return false
+        return ClickOcclusion.occluded(mc, d)
+    }
+
+    private const val SUPPORT_OCCLUSION_SLACK = 0.25
+    private const val SUPPORT_OCCLUSION_RANGE = 64.0
 
     private fun canInteract(stack: ItemStack): Boolean =
         !stack.isEmpty && (AllItems.WRENCH.isIn(stack) || stack.item is BlockItem ||
