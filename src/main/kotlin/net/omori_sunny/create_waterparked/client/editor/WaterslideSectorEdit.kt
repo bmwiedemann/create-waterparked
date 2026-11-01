@@ -559,8 +559,12 @@ object WaterslideSectorEdit {
     ): WallHit? {
         var best: WallHit? = null
         var bestD = Double.MAX_VALUE
+        // stop at the first real block (small slack keeps walls flush with a
+        // block face pickable): clicks aimed at a block in front of a wall
+        // belong to that block
+        val limit = minOf(maxDistance, ClickOcclusion.realHitDistance(Minecraft.getInstance()) + WALL_OCCLUSION_SLACK)
         var d = 0.0
-        while (d <= maxDistance) {
+        while (d <= limit) {
             val hit = resolveWallHit(level, eye.add(view.scale(d)))
             if (hit != null && d < bestD) {
                 bestD = d
@@ -570,6 +574,8 @@ object WaterslideSectorEdit {
         }
         return best
     }
+
+    private const val WALL_OCCLUSION_SLACK = 0.5
 
     data class WallHit(
         val curve: BezierConnection,
