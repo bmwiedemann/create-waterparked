@@ -14,7 +14,8 @@ object ShaderpackWaterAdapters {
         BslWaterAdapter,
         ComplementaryWaterAdapter,
         PhotonWaterAdapter,
-        IterationWaterAdapter
+        IterationWaterAdapter,
+        BlissWaterAdapter
     )
 
     @JvmStatic

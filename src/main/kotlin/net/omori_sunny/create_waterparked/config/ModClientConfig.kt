@@ -70,7 +70,7 @@ object ModClientConfig {
 
         BUILDER.push("compat")
         SHADER_WATER_COMPAT = BUILDER
-            .comment("Enable shaderpack water adaptation: the tube water and thrown stream are stamped and shaded through the active shaderpack's own water program (BSL / Complementary / Photon adapters). Turn off to render water with the plain translucent appearance under any shaderpack.")
+            .comment("Enable shaderpack water adaptation: the tube water and thrown stream are stamped and shaded through the active shaderpack's own water program (BSL / Complementary / Photon / Iteration / Bliss adapters). Turn off to render water with the plain translucent appearance under any shaderpack.")
             .define("shaderWaterCompat", true)
         BUILDER.pop()
 
