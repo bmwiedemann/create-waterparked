@@ -155,15 +155,40 @@ object WaterslideGhostPlacement {
 
     @JvmStatic
     fun fakeGhostHit(mc: Minecraft): net.minecraft.world.phys.BlockHitResult? {
-        val pick = mineHover ?: return null
         val player = mc.player ?: return null
+        // only the axe acts on ghost blocks (mining); any other item keeps
+        // the vanilla target so right-clicks reach the real block
+        if (player.mainHandItem.item !is net.minecraft.world.item.AxeItem) return null
+        val pick = mineHover ?: return null
+        val eye = player.eyePosition
         val view = player.getViewVector(1f)
-        return net.minecraft.world.phys.BlockHitResult(
-            player.eyePosition.add(view.scale(0.5)),
+        // a hit location inside the ghost cell: vanilla rejects use packets
+        // whose location is far from the hit block
+        val location = AABB(pick.worldCell).inflate(0.02)
+            .clip(eye, eye.add(view.scale(MINE_PICK_RANGE)))
+            .orElse(Vec3.atCenterOf(pick.worldCell))
+        val vanillaDistance = vanillaHitDistance(mc)
+        val hit = net.minecraft.world.phys.BlockHitResult(
+            location,
             net.minecraft.core.Direction.getNearest(view),
             pick.worldCell,
             false
         )
+        fakeHit = hit
+        fakeHitVanillaDistance = vanillaDistance
+        return hit
+    }
+
+    // the last synthetic hit handed to mc.hitResult and the real block
+    // distance it replaced, so the occlusion check never measures our own hit
+    private var fakeHit: net.minecraft.world.phys.BlockHitResult? = null
+    private var fakeHitVanillaDistance = Double.POSITIVE_INFINITY
+    private const val MINE_PICK_RANGE = 6.0
+
+    private fun vanillaHitDistance(mc: Minecraft): Double {
+        val fake = fakeHit
+        if (fake != null && mc.hitResult === fake) return fakeHitVanillaDistance
+        return ClickOcclusion.realHitDistance(mc)
     }
 
     @JvmStatic
@@ -262,9 +287,10 @@ object WaterslideGhostPlacement {
         if (WaterslideSupportEdit.hoveredPick() != null) return null
         val eye = player.eyePosition
         val view = player.getViewVector(1f)
-        val rayEnd = eye.add(view.scale(6.0))
+        val rayEnd = eye.add(view.scale(MINE_PICK_RANGE))
         var best: GhostPick? = null
-        var bestD = Double.MAX_VALUE
+        // a real block in front of every ghost cell keeps the vanilla target
+        var bestD = vanillaHitDistance(mc) + 1.0e-3
         val anchors = LinkedHashMap<WaterslideAnchorBlockEntity, Boolean>()
         for (be in net.omori_sunny.create_waterparked.client.render.WaterslideCurveRenderer.clientAnchors()) {
             if (!be.isRemoved) anchors[be] = true
@@ -518,6 +544,8 @@ object WaterslideGhostPlacement {
         hovered = null
         destroyHover = null
         mineHover = null
+        fakeHit = null
+        fakeHitVanillaDistance = Double.POSITIVE_INFINITY
         mining = null
         crackStage = -1
         crackCell = null
